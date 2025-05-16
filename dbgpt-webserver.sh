@@ -25,7 +25,7 @@ start() {
         echo "$APP_NAME 已经在运行中 (PID: $(cat "$PID_FILE"))."
     else
         echo "正在启动 $APP_NAME..."
-        nohup uv run --no-deps dbgpt start webserver --config "$CONFIG_FILE" >> "$LOG_FILE" 2>&1 &
+        nohup uv run --no-dev dbgpt start webserver --config "$CONFIG_FILE" >> "$LOG_FILE" 2>&1 &
         echo $! > "$PID_FILE"
         sleep 2
         if is_running; then
