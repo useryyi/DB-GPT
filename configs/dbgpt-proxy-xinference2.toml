@@ -1,0 +1,71 @@
+[system]
+# Load language from environment variable(It is set by the hook)
+language = "${env:DBGPT_LANG:-zh}"
+api_keys = []
+encrypt_key = "your_secret_key"
+
+# Server Configurations
+[service.web]
+host = "0.0.0.0"
+port = 5670
+
+[service.web.database]
+type = "sqlite"
+path = "pilot/meta_data/dbgpt.db"
+[service.model.worker]
+host = "127.0.0.1"
+
+[rag.storage]
+[rag.storage.vector]
+type = "chroma"
+persist_path = "pilot/data"
+
+[app]
+temperature = 0.6
+# 添加应用资源路径配置
+resources_path = "resources/apps"
+# 添加default_flow配置
+default_flow = "chat_flow"
+
+[[app.configs]]
+name = "chat_excel"
+temperature = 0.1
+duckdb_extensions_dir = []
+force_install = true
+
+[[app.configs]]
+name = "chat_normal"
+memory = {type="token", max_token_limit=20000}
+
+[[app.configs]]
+name = "chat_with_db_qa"
+schema_retrieve_top_k = 50
+memory = {type="token", max_token_limit=20000}
+
+# 添加应用starter配置
+[app.app_starter]
+enabled = true
+apps_dir = "apps"
+auto_login = true
+
+# Model Configurations
+[models]
+[[models.llms]]
+name = "qwen3"
+provider = "proxy/openai"
+api_base = "http://192.168.128.160:9997/v1"
+api_key = "sk-inference"
+
+[[models.embeddings]]
+name = "bge-m3"
+provider = "proxy/openai"
+api_url = "http://192.168.128.160:9997/v1/embeddings"
+api_key = "sk-inference"
+model = "bge-m3"
+
+[[models.rerankers]]
+type = "reranker"
+name = "bge-reranker-v2-m3"
+provider = "proxy/infiniai"
+api_url = "http://192.168.128.160:9997/v1/rerank" 
+api_key = "sk-inference"
