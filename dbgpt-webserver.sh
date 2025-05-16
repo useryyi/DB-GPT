@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# export UV_EXTRA_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple"
+export UV_EXTRA_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple"
 
 # DB-GPT Webserver 管理脚本 (简化版，不使用 conda)
 
@@ -25,7 +25,7 @@ start() {
         echo "$APP_NAME 已经在运行中 (PID: $(cat "$PID_FILE"))."
     else
         echo "正在启动 $APP_NAME..."
-        nohup uv run --offline dbgpt start webserver --config "$CONFIG_FILE" >> "$LOG_FILE" 2>&1 &
+        nohup uv run dbgpt start webserver --config "$CONFIG_FILE" >> "$LOG_FILE" 2>&1 &
         echo $! > "$PID_FILE"
         sleep 2
         if is_running; then
