@@ -1,7 +1,10 @@
 import json
+import logging
 import os
 from functools import reduce
 from typing import Dict, List, Type
+
+logger = logging.getLogger(__name__)
 
 from dbgpt import SystemApp
 from dbgpt.core import (
@@ -25,6 +28,7 @@ from dbgpt_serve.rag.models.document_db import (
     KnowledgeDocumentEntity,
 )
 from dbgpt_serve.rag.retriever.knowledge_space import KnowledgeSpaceRetriever
+from dbgpt_app.knowledge.neo4j_service import Neo4jQueryService
 
 
 class ChatKnowledge(BaseChat):
@@ -108,6 +112,10 @@ class ChatKnowledge(BaseChat):
         )
         if len(documents) > 0:
             self.document_ids = [document.id for document in documents]
+        
+        # Initialize Neo4j query service
+        self.neo4j_service = Neo4jQueryService()
+        logger.info(f"Neo4j service initialized, connected: {self.neo4j_service.is_connected()}")
 
     async def _handle_final_output(
         self, final_output: ModelOutput, incremental: bool = False
@@ -145,6 +153,16 @@ class ChatKnowledge(BaseChat):
         tasks = [self.execute_similar_search(user_input)]
         candidates_with_scores = await run_async_tasks(tasks=tasks, concurrency_limit=1)
         candidates_with_scores = reduce(lambda x, y: x + y, candidates_with_scores)
+        
+        # Execute Neo4j query in parallel with knowledge base search
+        neo4j_results = []
+        if self.neo4j_service.is_connected():
+            try:
+                neo4j_results = self.neo4j_service.query_graph(user_input, limit=5)
+                logger.info(f"Neo4j returned {len(neo4j_results)} results")
+            except Exception as e:
+                logger.error(f"Error querying Neo4j: {e}")
+        
         self.chunks_with_score = []
         if not candidates_with_scores or len(candidates_with_scores) == 0:
             print("no relevant docs to retrieve")
@@ -160,6 +178,14 @@ class ChatKnowledge(BaseChat):
                     self.chunks_with_score.append((chucks[0], chunk.score))
 
             context = "\n".join([doc.content for doc in candidates_with_scores])
+        
+        # Combine knowledge base context with Neo4j results
+        combined_context = context
+        if neo4j_results:
+            neo4j_context = self.neo4j_service.format_results(neo4j_results)
+            combined_context = f"{context}\n\n{neo4j_context}"
+            logger.info("Combined knowledge base and Neo4j results")
+        
         self.relations = list(
             set(
                 [
@@ -169,7 +195,7 @@ class ChatKnowledge(BaseChat):
             )
         )
         input_values = {
-            "context": context,
+            "context": combined_context,
             "question": user_input,
             "relations": self.relations,
         }
@@ -257,3 +283,11 @@ class ChatKnowledge(BaseChat):
             return await self._space_retriever.aretrieve_with_scores(
                 query, self.recall_score
             )
+    
+    def __del__(self):
+        """Cleanup Neo4j connection when object is destroyed."""
+        if hasattr(self, 'neo4j_service') and self.neo4j_service:
+            try:
+                self.neo4j_service.close()
+            except Exception as e:
+                logger.error(f"Error closing Neo4j connection: {e}")
