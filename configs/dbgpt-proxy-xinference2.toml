@@ -54,13 +54,13 @@ auto_login = true
 name = "qwen3"
 provider = "proxy/openai"
 api_base = "http://192.168.128.160:9997/v1"
-api_key = "sk-inference"
+api_key = "sk-7Hs4qRt2vBn8J"
 
 [[models.embeddings]]
 name = "bge-m3"
 provider = "proxy/openai"
 api_url = "http://192.168.128.160:9997/v1/embeddings"
-api_key = "sk-inference"
+api_key = "sk-7Hs4qRt2vBn8J"
 model = "bge-m3"
 
 [[models.rerankers]]
@@ -68,4 +68,4 @@ type = "reranker"
 name = "bge-reranker-v2-m3"
 provider = "proxy/infiniai"
 api_url = "http://192.168.128.160:9997/v1/rerank" 
-api_key = "sk-inference"
+api_key = "sk-7Hs4qRt2vBn8J"
