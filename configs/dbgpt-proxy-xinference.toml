@@ -58,3 +58,11 @@ provider = "proxy/infiniai"
 api_url = "http://192.168.128.168:9997/v1/rerank" 
 # api_key = "sk-inference"
 api_key = "${env:INFINIAI_API_KEY:-sk-kk6ej7jfzwkqrf75}" 
+
+# Neo4j 知识图谱配置
+[neo4j]
+host = "192.168.102.59"
+port = 7687
+user = "neo4j"
+password = "tWsM@neo4j2023"
+database = "neo4j"
