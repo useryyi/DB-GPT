@@ -27,6 +27,34 @@ port=7687
 username="admin"
 password="73@TuGraph"
 
+[app]
+temperature = 0.6
+# 添加应用资源路径配置
+resources_path = "resources/apps"
+# 添加default_flow配置
+default_flow = "chat_flow"
+
+[[app.configs]]
+name = "chat_excel"
+temperature = 0.1
+duckdb_extensions_dir = []
+force_install = true
+
+[[app.configs]]
+name = "chat_normal"
+memory = {type="token", max_token_limit=20000}
+
+[[app.configs]]
+name = "chat_with_db_qa"
+schema_retrieve_top_k = 50
+memory = {type="token", max_token_limit=20000}
+
+# 添加应用starter配置
+[app.app_starter]
+enabled = true
+apps_dir = "apps"
+auto_login = true
+
 # Model Configurations
 [models]
 [[models.llms]]
