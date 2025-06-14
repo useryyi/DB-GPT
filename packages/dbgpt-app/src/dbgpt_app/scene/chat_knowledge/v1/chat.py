@@ -114,8 +114,21 @@ class ChatKnowledge(BaseChat):
             self.document_ids = [document.id for document in documents]
         
         # Initialize Neo4j query service
-        self.neo4j_service = Neo4jQueryService()
-        logger.info(f"Neo4j service initialized, connected: {self.neo4j_service.is_connected()}")
+        try:
+            # Import the simplified Neo4j service that doesn't require LangChain chains
+            import sys
+            import os
+            sys.path.insert(0, '/home/yannic/work/github/DB-GPT')
+            from simple_neo4j_service import SimpleNeo4jQueryService
+            
+            self.neo4j_service = SimpleNeo4jQueryService()
+            is_connected = self.neo4j_service.is_connected()
+            logger.info(f"Simplified Neo4j service initialized, connected: {is_connected}")
+            if not is_connected:
+                logger.warning("Neo4j service is not connected. Check if Neo4j server is running at 192.168.102.59:7687")
+        except Exception as e:
+            logger.error(f"Failed to initialize Neo4j service: {e}")
+            self.neo4j_service = None
 
     async def _handle_final_output(
         self, final_output: ModelOutput, incremental: bool = False
@@ -156,12 +169,15 @@ class ChatKnowledge(BaseChat):
         
         # Execute Neo4j query in parallel with knowledge base search
         neo4j_results = []
-        if self.neo4j_service.is_connected():
+        if self.neo4j_service and self.neo4j_service.is_connected():
             try:
+                logger.info(f"Executing Neo4j query for: {user_input}")
                 neo4j_results = self.neo4j_service.query_graph(user_input, limit=5)
                 logger.info(f"Neo4j returned {len(neo4j_results)} results")
             except Exception as e:
                 logger.error(f"Error querying Neo4j: {e}")
+        else:
+            logger.warning("Neo4j service is not available or not connected, skipping Neo4j query")
         
         self.chunks_with_score = []
         if not candidates_with_scores or len(candidates_with_scores) == 0:
@@ -184,7 +200,9 @@ class ChatKnowledge(BaseChat):
         if neo4j_results:
             neo4j_context = self.neo4j_service.format_results(neo4j_results)
             combined_context = f"{context}\n\n{neo4j_context}"
-            logger.info("Combined knowledge base and Neo4j results")
+            logger.info("Successfully combined knowledge base and Neo4j results")
+        else:
+            logger.info("No Neo4j results to combine, using only knowledge base context")
         
         self.relations = list(
             set(
