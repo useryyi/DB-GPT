@@ -51,6 +51,37 @@ class SystemParameters:
 
 
 @dataclass
+class Neo4jConfig(BaseParameters):
+    """Neo4j connection configuration."""
+    __cfg_type__ = "app"
+    
+    host: str = field(
+        default="localhost",
+        metadata={"help": _("Neo4j host address")},
+    )
+    port: int = field(
+        default=7687,
+        metadata={"help": _("Neo4j port")},
+    )
+    user: str = field(
+        default="neo4j",
+        metadata={"help": _("Neo4j username")},
+    )
+    password: str = field(
+        default="password",
+        metadata={"help": _("Neo4j password")},
+    )
+    database: str = field(
+        default="neo4j",
+        metadata={"help": _("Neo4j database name")},
+    )
+    
+    @property
+    def uri(self) -> str:
+        return f"bolt://{self.host}:{self.port}"
+
+
+@dataclass
 class StorageConfig(BaseParameters):
     __cfg_type__ = "app"
 
@@ -372,6 +403,10 @@ class ApplicationConfig(BaseParameters):
     app: GPTsAppConfig = field(
         default_factory=lambda: GPTsAppConfig(),
         metadata={"help": _("GPTs application configuration")},
+    )
+    neo4j: Neo4jConfig = field(
+        default_factory=lambda: Neo4jConfig(),
+        metadata={"help": _("Neo4j knowledge graph configuration")},
     )
     trace: TracerParameters = field(
         default_factory=TracerParameters,

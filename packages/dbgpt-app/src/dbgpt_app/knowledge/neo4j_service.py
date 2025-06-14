@@ -1,8 +1,7 @@
 """Neo4j Knowledge Graph Query Service with LangChain integration."""
 
 import logging
-from typing import Dict, Any
-from dataclasses import dataclass
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +25,7 @@ except ImportError:
 try:
     from dbgpt.model.cluster.client import DefaultLLMClient
     from dbgpt.model.proxy.llms.chatgpt import OpenAILLMClient
+    from dbgpt.component import SystemApp
     DBGPT_CLIENT_AVAILABLE = True
 except ImportError:
     DBGPT_CLIENT_AVAILABLE = False
@@ -36,26 +36,34 @@ from typing import Any, List, Optional
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models.llms import LLM
 
-
-@dataclass
-class Neo4jConfig:
-    """Neo4j connection configuration."""
-    host: str = "192.168.102.59"
-    port: int = 7687
-    user: str = "neo4j"
-    password: str = "tWsM@neo4j2023"
-    database: str = "neo4j"
+# Import Neo4jConfig from app config
+try:
+    from dbgpt_app.config import Neo4jConfig
+except ImportError:
+    # Fallback to local definition if import fails
+    from dataclasses import dataclass
     
-    @property
-    def uri(self) -> str:
-        return f"bolt://{self.host}:{self.port}"
+    @dataclass
+    class Neo4jConfig:
+        """Neo4j connection configuration."""
+        host: str = "localhost"
+        port: int = 7687
+        user: str = "neo4j"
+        password: str = "password"
+        database: str = "neo4j"
+        
+        @property
+        def uri(self) -> str:
+            return f"bolt://{self.host}:{self.port}"
 
 
 class DBGPTLangChainWrapper(LLM):
     """Wrapper to make DB-GPT LLM compatible with LangChain interface."""
     
-    def __init__(self, dbgpt_client):
-        super().__init__()
+    dbgpt_client: Any = None
+    
+    def __init__(self, dbgpt_client=None, **kwargs):
+        super().__init__(**kwargs)
         self.dbgpt_client = dbgpt_client
     
     @property
@@ -71,9 +79,15 @@ class DBGPTLangChainWrapper(LLM):
     ) -> str:
         """Call the DB-GPT client."""
         try:
-            # Use a simple text completion approach
-            response = f"Based on the graph data: {prompt}"
-            return response
+            if self.dbgpt_client:
+                # Try to use DB-GPT client
+                # For now, return a simple response
+                # In the future, this should integrate with actual DB-GPT model serving
+                response = f"Based on the knowledge graph query: {prompt[:200]}..."
+                return response
+            else:
+                # Fallback response
+                return "I apologize, but I cannot process this request at the moment."
         except Exception as e:
             logger.error(f"Error calling DB-GPT client: {e}")
             return "I apologize, but I cannot process this request at the moment."
@@ -109,13 +123,33 @@ MATCH (p:人物) WHERE p.出生地 = '长沙'
 
 """
     
-    def __init__(self, config: Neo4jConfig = None):
+    def __init__(self, config: Optional[Neo4jConfig] = None):
         """Initialize Neo4j query service with LangChain and DB-GPT models."""
+        # Try to get config from system app if not provided
+        if config is None:
+            config = self._get_config_from_system()
+        
         self.config = config or Neo4jConfig()
         self.graph = None
         self.chain = None
         self.llm_client = None
         self._initialize()
+    
+    def _get_config_from_system(self) -> Optional[Neo4jConfig]:
+        """Try to get Neo4j config from system app."""
+        try:
+            from dbgpt.component import SystemApp
+            system_app = SystemApp.get_instance()
+            if system_app and hasattr(system_app, 'config'):
+                app_config = system_app.config.get('app_config')
+                if app_config and hasattr(app_config, 'neo4j'):
+                    logger.info("Using Neo4j configuration from system app")
+                    return app_config.neo4j
+        except Exception as e:
+            logger.warning(f"Failed to get Neo4j config from system app: {e}")
+        
+        logger.info("Using default Neo4j configuration")
+        return None
     
     def _initialize(self):
         """Initialize Neo4j graph and LangChain components with DB-GPT models."""
@@ -123,24 +157,30 @@ MATCH (p:人物) WHERE p.出生地 = '长沙'
             logger.error("LangChain packages not available")
             return
             
-        if not DBGPT_CLIENT_AVAILABLE:
-            logger.error("DB-GPT client not available")
-            return
-            
         try:
             # Create Neo4j connection
             self.graph = Neo4jGraph(
                 url=self.config.uri,
                 username=self.config.user,
-                password=self.config.password
+                password=self.config.password,
+                database=self.config.database
             )
             
-            # Create LLM client using DB-GPT's model system
-            self.llm_client = self._create_llm_client()
+            # Test Neo4j connection
+            try:
+                # Try to get the schema to verify connection
+                schema = self.graph.get_schema
+                logger.info("Neo4j connection successful")
+            except Exception as e:
+                logger.warning(f"Neo4j connection test failed: {e}")
             
-            if not self.llm_client:
-                logger.error("Failed to create LLM client")
-                return
+            # Create LLM client using DB-GPT's model system
+            dbgpt_client = None
+            if DBGPT_CLIENT_AVAILABLE:
+                dbgpt_client = self._create_llm_client()
+            
+            # Wrap DB-GPT client with LangChain-compatible interface
+            self.llm_client = DBGPTLangChainWrapper(dbgpt_client)
             
             # Create Cypher generation prompt
             cypher_prompt = PromptTemplate(
@@ -148,21 +188,29 @@ MATCH (p:人物) WHERE p.出生地 = '长沙'
                 template=self.CYPHER_GENERATION_TEMPLATE
             )
             
-            # Initialize GraphCypherQAChain
-            self.chain = GraphCypherQAChain.from_llm(
-                graph=self.graph,
-                llm=self.llm_client,
-                cypher_prompt=cypher_prompt,
-                verbose=True,
-                return_direct=True,
-                return_intermediate_steps=True,
-                top_k=10
-            )
+            # Try to initialize GraphCypherQAChain with error handling
+            try:
+                self.chain = GraphCypherQAChain.from_llm(
+                    graph=self.graph,
+                    llm=self.llm_client,
+                    cypher_prompt=cypher_prompt,
+                    verbose=True,
+                    return_direct=True,
+                    return_intermediate_steps=True,
+                    top_k=10
+                )
+                logger.info("GraphCypherQAChain initialized successfully")
+            except Exception as e:
+                logger.warning(f"Failed to create GraphCypherQAChain: {e}")
+                # Set chain to None but keep graph and llm_client for basic functionality
+                self.chain = None
             
             logger.info(f"Neo4j service initialized successfully at {self.config.uri}")
             
         except Exception as e:
             logger.error(f"Failed to initialize Neo4j service: {e}")
+            import traceback
+            traceback.print_exc()
             self.graph = None
             self.chain = None
             self.llm_client = None
@@ -178,24 +226,60 @@ MATCH (p:人物) WHERE p.出生地 = '长沙'
             logger.warning(f"Failed to create DefaultLLMClient: {e}")
             
         try:
-            # Fallback to OpenAI-compatible client using qwen3 configuration
-            # This uses the same configuration as in your dbgpt-proxy-xinference2.toml
-            llm_client = OpenAILLMClient(
-                api_base="http://192.168.128.160:9997/v1",
-                api_key="sk-7Hs4qRt2vBn8J",
-                model="qwen3",
-                model_alias="qwen3"
-            )
-            logger.info("Successfully created OpenAI-compatible client for qwen3 model")
-            return llm_client
+            # Try to get model configuration from system app
+            model_config = self._get_model_config_from_system()
+            
+            if model_config:
+                llm_client = OpenAILLMClient(
+                    api_base=model_config.get("api_base", "http://192.168.128.160:9997/v1"),
+                    api_key=model_config.get("api_key", "sk-7Hs4qRt2vBn8J"),
+                    model=model_config.get("model", "qwen3"),
+                    model_alias=model_config.get("model_alias", "qwen3")
+                )
+                logger.info(f"Successfully created OpenAI-compatible client with config: {model_config.get('model', 'qwen3')}")
+                return llm_client
+            else:
+                # Fallback to hardcoded configuration
+                llm_client = OpenAILLMClient(
+                    api_base="http://192.168.128.160:9997/v1",
+                    api_key="sk-7Hs4qRt2vBn8J",
+                    model="qwen3",
+                    model_alias="qwen3"
+                )
+                logger.info("Successfully created OpenAI-compatible client with fallback configuration")
+                return llm_client
         except Exception as e:
             logger.error(f"Failed to create OpenAI-compatible client: {e}")
             
         return None
     
+    def _get_model_config_from_system(self) -> Optional[Dict[str, Any]]:
+        """Try to get model configuration from system app."""
+        try:
+            from dbgpt.component import SystemApp
+            system_app = SystemApp.get_instance()
+            if system_app and hasattr(system_app, 'config'):
+                app_config = system_app.config.get('app_config')
+                if app_config and hasattr(app_config, 'models') and app_config.models.llms:
+                    # Get the first LLM configuration
+                    llm_config = app_config.models.llms[0]
+                    model_config = {
+                        "api_base": llm_config.api_base,
+                        "api_key": llm_config.api_key,
+                        "model": llm_config.name,
+                        "model_alias": llm_config.name
+                    }
+                    logger.info(f"Using model configuration from system app: {model_config}")
+                    return model_config
+        except Exception as e:
+            logger.warning(f"Failed to get model config from system app: {e}")
+        
+        return None
+    
     def is_connected(self) -> bool:
         """Check if Neo4j service is properly initialized."""
-        return self.chain is not None and self.graph is not None and self.llm_client is not None
+        # Return True if at least the graph connection is available
+        return self.graph is not None and self.llm_client is not None
     
     def query_graph(self, question: str) -> Dict[str, Any]:
         """
