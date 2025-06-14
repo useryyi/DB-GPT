@@ -169,20 +169,88 @@ class ChatKnowledge(BaseChat):
         
         # Execute Neo4j query in parallel with knowledge base search
         neo4j_results = []
+        neo4j_context = ""
         if self.neo4j_service and self.neo4j_service.is_connected():
             try:
                 logger.info(f"Executing Neo4j query for: {user_input}")
                 neo4j_results = self.neo4j_service.query_graph(user_input, limit=5)
                 logger.info(f"Neo4j returned {len(neo4j_results)} results")
+                if neo4j_results:
+                    # Format Neo4j results - handle various node types, integrate naturally
+                    neo4j_context = ""
+                    for i, record in enumerate(neo4j_results, 1):
+                        # Process each node in the record
+                        for key, node in record.items():
+                            if hasattr(node, '_properties') and hasattr(node, 'labels'):
+                                props = node._properties
+                                labels = list(node.labels)
+                                
+                                # Get node name - try multiple possible name fields
+                                node_name = (props.get('nodeName') or 
+                                           props.get('人物名称') or 
+                                           props.get('名称') or 
+                                           props.get('name') or 
+                                           props.get('title') or 
+                                           props.get('标题') or '未知')
+                                
+                                # Format as natural text without rigid structure
+                                if '人物' in labels:
+                                    # For person nodes, create natural description
+                                    career = props.get('职业', '')
+                                    achievements = props.get('主要成就', '')
+                                    death_date = props.get('逝世日期', '')
+                                    birthplace = props.get('出生地', '')
+                                    
+                                    person_info = f"{node_name}"
+                                    if career:
+                                        person_info += f"，{career}"
+                                    if achievements:
+                                        # Split achievements to avoid repetition and limit length
+                                        achievement_parts = achievements.split('；')[:2]  # Take first 2 parts only
+                                        if achievement_parts:
+                                            person_info += f"，{achievement_parts[0]}"
+                                    if death_date:
+                                        person_info += f"，逝世于{death_date}"
+                                    if birthplace and birthplace != '未知':
+                                        person_info += f"，出生地为{birthplace}"
+                                    
+                                    neo4j_context += person_info + "。\n"
+                                else:
+                                    # For other node types, create natural description
+                                    label_text = labels[0] if labels else '项目'
+                                    node_info = f"{node_name}（{label_text}）"
+                                    
+                                    # Add key properties naturally, limit to avoid repetition
+                                    properties = []
+                                    for prop_key, prop_value in props.items():
+                                        if (prop_key not in ['nodeName', '人物名称', '名称', 'name', 'title', '标题', 'resourceId'] 
+                                            and prop_value and str(prop_value).strip() and len(properties) < 3):
+                                            # Limit property value length to avoid repetition
+                                            prop_str = str(prop_value)[:100]
+                                            properties.append(f"{prop_key}：{prop_str}")
+                                    
+                                    if properties:
+                                        node_info += "，" + "，".join(properties)
+                                    
+                                    neo4j_context += node_info + "。\n"
+                            else:
+                                # Fallback for non-node objects
+                                neo4j_context += f"{str(node)[:100]}。\n"
+                            
+                            # Only process the first node to avoid duplication
+                            break
+                    neo4j_context = neo4j_context.strip()
+                    logger.info(f"Neo4j context generated: {neo4j_context[:200]}...")
             except Exception as e:
                 logger.error(f"Error querying Neo4j: {e}")
         else:
             logger.warning("Neo4j service is not available or not connected, skipping Neo4j query")
         
         self.chunks_with_score = []
+        knowledge_base_context = ""
         if not candidates_with_scores or len(candidates_with_scores) == 0:
             print("no relevant docs to retrieve")
-            context = "no relevant docs to retrieve"
+            knowledge_base_context = ""
         else:
             self.chunks_with_score = []
             for chunk in candidates_with_scores:
@@ -193,16 +261,26 @@ class ChatKnowledge(BaseChat):
                 if len(chucks) > 0:
                     self.chunks_with_score.append((chucks[0], chunk.score))
 
-            context = "\n".join([doc.content for doc in candidates_with_scores])
+            knowledge_base_context = "\n".join([doc.content for doc in candidates_with_scores])
         
-        # Combine knowledge base context with Neo4j results
-        combined_context = context
-        if neo4j_results:
-            neo4j_context = self.neo4j_service.format_results(neo4j_results)
-            combined_context = f"{context}\n\n{neo4j_context}"
-            logger.info("Successfully combined knowledge base and Neo4j results")
+        # Combine contexts based on priority rules
+        final_context = ""
+        if neo4j_context and knowledge_base_context:
+            # Both have content - combine them with clear separation
+            final_context = f"{knowledge_base_context}\n\n{neo4j_context}"
+            logger.info("Combined knowledge base and Neo4j results")
+        elif neo4j_context:
+            # Only Neo4j has content
+            final_context = neo4j_context
+            logger.info("Using only Neo4j results as knowledge base has no content")
+        elif knowledge_base_context:
+            # Only knowledge base has content
+            final_context = knowledge_base_context
+            logger.info("Using only knowledge base results as Neo4j has no content")
         else:
-            logger.info("No Neo4j results to combine, using only knowledge base context")
+            # Neither has content
+            final_context = ""
+            logger.info("Neither Neo4j nor knowledge base returned content")
         
         self.relations = list(
             set(
@@ -213,9 +291,11 @@ class ChatKnowledge(BaseChat):
             )
         )
         input_values = {
-            "context": combined_context,
+            "context": final_context,
             "question": user_input,
             "relations": self.relations,
+            "neo4j_context": neo4j_context,
+            "knowledge_base_context": knowledge_base_context,
         }
         return input_values
 

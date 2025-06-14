@@ -91,49 +91,109 @@ class SimpleNeo4jQueryService:
             return []
     
     def _generate_simple_cypher(self, question: str, limit: int) -> str:
-        """Generate simple Cypher query based on keywords."""
+        """Generate simple Cypher query based on keywords for various node types."""
         question_lower = question.lower()
         
-        # Basic keyword matching for Chinese historical figures
+        # 人物查询
         if any(keyword in question_lower for keyword in ['毛主席', '毛泽东']):
-            return f"MATCH (p:人物) WHERE p.nodeName CONTAINS '毛泽东' OR p.人物名称 CONTAINS '毛泽东' RETURN p LIMIT {limit}"
+            return f"MATCH (n:人物) WHERE n.nodeName CONTAINS '毛泽东' OR n.人物名称 CONTAINS '毛泽东' RETURN n LIMIT {limit}"
         elif any(keyword in question_lower for keyword in ['曾国藩']):
-            return f"MATCH (p:人物) WHERE p.nodeName CONTAINS '曾国藩' OR p.人物名称 CONTAINS '曾国藩' RETURN p LIMIT {limit}"
+            return f"MATCH (n:人物) WHERE n.nodeName CONTAINS '曾国藩' OR n.人物名称 CONTAINS '曾国藩' RETURN n LIMIT {limit}"
         elif any(keyword in question_lower for keyword in ['孙中山']):
-            return f"MATCH (p:人物) WHERE p.nodeName CONTAINS '孙中山' OR p.人物名称 CONTAINS '孙中山' RETURN p LIMIT {limit}"
+            return f"MATCH (n:人物) WHERE n.nodeName CONTAINS '孙中山' OR n.人物名称 CONTAINS '孙中山' RETURN n LIMIT {limit}"
         elif any(keyword in question_lower for keyword in ['历史人物', '人物']):
-            return f"MATCH (p:人物) RETURN p LIMIT {limit}"
-        elif any(keyword in question_lower for keyword in ['出生地', '地方']):
-            return f"MATCH (p:人物) WHERE p.出生地 IS NOT NULL RETURN p.nodeName, p.出生地 LIMIT {limit}"
+            return f"MATCH (n:人物) RETURN n LIMIT {limit}"
+        
+        # 地点查询
+        elif any(keyword in question_lower for keyword in ['地点', '地方', '城市']):
+            return f"MATCH (n:地点) RETURN n LIMIT {limit}"
+        elif any(keyword in question_lower for keyword in ['出生地']):
+            return f"MATCH (n:人物) WHERE n.出生地 IS NOT NULL RETURN n.nodeName, n.出生地 LIMIT {limit}"
+        
+        # 事件查询
+        elif any(keyword in question_lower for keyword in ['事件', '历史事件']):
+            return f"MATCH (n:事件) RETURN n LIMIT {limit}"
+        
+        # 战役查询
+        elif any(keyword in question_lower for keyword in ['战役', '军事行动', '战争']):
+            return f"MATCH (n:战役阶段) RETURN n LIMIT {limit}"
+        
+        # 组织查询
+        elif any(keyword in question_lower for keyword in ['组织', '部队']):
+            return f"MATCH (n:组织) RETURN n LIMIT {limit}"
+            
+        # 国家查询
+        elif any(keyword in question_lower for keyword in ['国家']):
+            return f"MATCH (n:国家) RETURN n LIMIT {limit}"
+            
+        # 政策查询
+        elif any(keyword in question_lower for keyword in ['政策', '政权']):
+            return f"MATCH (n:政策) RETURN n LIMIT {limit}"
+            
+        # 文献查询
+        elif any(keyword in question_lower for keyword in ['文献', '古籍']):
+            return f"MATCH (n:文献) RETURN n LIMIT {limit}"
+            
+        # 朝代查询
+        elif any(keyword in question_lower for keyword in ['朝代', '王朝']):
+            return f"MATCH (n:朝代) RETURN n LIMIT {limit}"
+            
+        # 一带一路项目查询
+        elif any(keyword in question_lower for keyword in ['一带一路', '项目']):
+            return f"MATCH (n:一带一路项目) RETURN n LIMIT {limit}"
+        
+        # 非物质文化遗产查询
+        elif any(keyword in question_lower for keyword in ['非遗', '文化遗产', '传承']):
+            return f"MATCH (n:非物质文化遗产项目) RETURN n LIMIT {limit}"
+        
         else:
-            # Default query - return some people
-            return f"MATCH (p:人物) RETURN p LIMIT {limit}"
+            # Default query - search across all node types
+            return f"MATCH (n) WHERE ANY(prop IN keys(n) WHERE toString(n[prop]) CONTAINS '{question[:10]}') RETURN n LIMIT {limit}"
     
     def format_results(self, results: List[Dict[str, Any]]) -> str:
-        """Format query results as readable text."""
+        """Format query results as readable text for various node types."""
         if not results:
             return "未找到相关信息。"
         
         formatted_text = "查询结果：\n"
         for i, record in enumerate(results, 1):
-            if 'p' in record:
-                person = record['p']
-                if hasattr(person, '_properties'):
-                    props = person._properties
-                    name = props.get('nodeName', props.get('人物名称', '未知'))
-                    career = props.get('职业', '未知')
-                    birthplace = props.get('出生地', '未知')
-                    achievements = props.get('主要成就', '未知')
+            # Process each node in the record
+            for key, node in record.items():
+                if hasattr(node, '_properties') and hasattr(node, 'labels'):
+                    props = node._properties
+                    labels = list(node.labels)
                     
-                    formatted_text += f"{i}. 姓名: {name}\n"
-                    formatted_text += f"   职业: {career}\n"
-                    formatted_text += f"   出生地: {birthplace}\n"
-                    formatted_text += f"   主要成就: {achievements}\n\n"
+                    # Get node name - try multiple possible name fields
+                    node_name = (props.get('nodeName') or 
+                               props.get('人物名称') or 
+                               props.get('名称') or 
+                               props.get('name') or 
+                               props.get('title') or 
+                               props.get('标题') or '未知')
+                    
+                    # Add node info with label
+                    label_text = labels[0] if labels else '节点'
+                    formatted_text += f"{i}. {node_name} ({label_text})\n"
+                    
+                    # Add key properties based on node type
+                    if '人物' in labels:
+                        career = props.get('职业', '未知')
+                        birthplace = props.get('出生地', '未知')
+                        achievements = props.get('主要成就', '未知')
+                        formatted_text += f"   职业: {career}\n"
+                        formatted_text += f"   出生地: {birthplace}\n"
+                        formatted_text += f"   主要成就: {achievements}\n"
+                    else:
+                        # For other node types, show all non-empty properties (except resourceId)
+                        for prop_key, prop_value in props.items():
+                            if (prop_key not in ['nodeName', '人物名称', '名称', 'name', 'title', '标题', 'resourceId'] 
+                                and prop_value and str(prop_value).strip()):
+                                formatted_text += f"   {prop_key}: {prop_value}\n"
+                    
+                    formatted_text += "\n"
                 else:
-                    formatted_text += f"{i}. {str(person)}\n"
-            else:
-                # Handle other record formats
-                formatted_text += f"{i}. {str(record)}\n"
+                    # Handle other record formats
+                    formatted_text += f"{i}. {str(node)}\n"
         
         return formatted_text.strip()
     
