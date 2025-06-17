@@ -387,11 +387,122 @@ class KnowledgeService:
                 f"recall_cost_time is {recall_cost_time} seconds, {cost_time_map}"
             )
 
+            # Enrich chunks with doc_name field
+            chunks = self._enrich_chunks_with_doc_name(space_name, chunks)
+
             # return chunks, cost_time_map
             return chunks
         except Exception as e:
             logger.error(f" recall_test error: {str(e)}")
         return []
+
+    def _enrich_chunks_with_doc_name(self, space_name: str, chunks):
+        """Enrich chunks with doc_name field based on document_id or source path
+        Args:
+            - space_name: Knowledge Space Name
+            - chunks: List of chunks to enrich
+        Returns:
+            - List of enriched chunks with doc_name field
+        """
+        try:
+            # Get all documents in the space 
+            query = KnowledgeDocumentEntity(space=space_name)
+            documents = knowledge_document_dao.get_documents(query)
+            
+            # Build mapping from document id to document info
+            doc_id_to_info = {}
+            
+            for doc in documents:
+                if doc.id:
+                    doc_info = {
+                        'id': doc.id,
+                        'doc_name': doc.doc_name,
+                        'doc_type': doc.doc_type
+                    }
+                    doc_id_to_info[doc.id] = doc_info
+            
+            # For chunks that don't have document_id in metadata, 
+            # we need to find them through database chunks
+            chunk_contents_to_check = []
+            chunk_content_map = {}
+            
+            # Enrich each chunk with document info
+            for i, chunk in enumerate(chunks):
+                doc_info = None
+                
+                # Try to get document_id from different sources
+                if hasattr(chunk, 'metadata') and chunk.metadata:
+                    # Method 1: Check if document_id is directly in metadata
+                    doc_id = chunk.metadata.get('document_id')
+                    if doc_id and doc_id in doc_id_to_info:
+                        doc_info = doc_id_to_info[doc_id]
+                    
+                    # Method 2: Check in prop_field if it exists (from QARetriever)
+                    if not doc_info and 'prop_field' in chunk.metadata:
+                        prop_field = chunk.metadata.get('prop_field', {})
+                        if isinstance(prop_field, dict):
+                            doc_id = prop_field.get('document_id')
+                            if doc_id and doc_id in doc_id_to_info:
+                                doc_info = doc_id_to_info[doc_id]
+                
+                # Fallback: check if chunk has document_id attribute directly
+                if not doc_info and hasattr(chunk, 'document_id'):
+                    doc_id = chunk.document_id
+                    if doc_id and doc_id in doc_id_to_info:
+                        doc_info = doc_id_to_info[doc_id]
+                
+                # If we still don't have doc_info, prepare for database lookup
+                if not doc_info and hasattr(chunk, 'content') and chunk.content:
+                    chunk_contents_to_check.append(chunk.content[:100])  # Use first 100 chars for matching
+                    chunk_content_map[chunk.content[:100]] = i
+                
+                # If we found document info, enrich the chunk
+                if doc_info:
+                    self._apply_doc_info_to_chunk(chunk, doc_info)
+            
+            # For chunks without document_id, try to find them in database by content
+            if chunk_contents_to_check:
+                # Get chunks from database that match space documents
+                doc_ids = list(doc_id_to_info.keys())
+                if doc_ids:
+                    # Query chunks from database for this space's documents
+                    db_chunks = document_chunk_dao.get_document_chunks(
+                        DocumentChunkEntity(), document_ids=doc_ids, page_size=10000
+                    )
+                    
+                    # Build content to document_id mapping from database
+                    content_to_doc_id = {}
+                    for db_chunk in db_chunks:
+                        if db_chunk.content and db_chunk.document_id:
+                            content_key = db_chunk.content[:100]
+                            content_to_doc_id[content_key] = db_chunk.document_id
+                    
+                    # Match retrieved chunks with database chunks by content
+                    for content_key, chunk_index in chunk_content_map.items():
+                        if content_key in content_to_doc_id:
+                            doc_id = content_to_doc_id[content_key]
+                            if doc_id in doc_id_to_info:
+                                doc_info = doc_id_to_info[doc_id]
+                                self._apply_doc_info_to_chunk(chunks[chunk_index], doc_info)
+            
+            return chunks
+        except Exception as e:
+            logger.error(f"Error enriching chunks with doc_name: {str(e)}")
+            return chunks
+    
+    def _apply_doc_info_to_chunk(self, chunk, doc_info):
+        """Apply document info to a chunk"""
+        # Set document info in metadata
+        if hasattr(chunk, 'metadata') and chunk.metadata is not None:
+            chunk.metadata['id'] = doc_info['id']
+            chunk.metadata['doc_name'] = doc_info['doc_name']
+            chunk.metadata['doc_type'] = doc_info['doc_type']
+        
+        # Also set as direct attributes if chunk supports it
+        if hasattr(chunk, 'doc_name'):
+            chunk.doc_name = doc_info['doc_name']
+        if hasattr(chunk, 'document_id'):
+            chunk.document_id = doc_info['id']
 
     def update_knowledge_space(
         self, space_id: int, space_request: KnowledgeSpaceRequest
