@@ -574,6 +574,19 @@ class Service(BaseService[KnowledgeSpaceEntity, SpaceServeRequest, SpaceServeRes
                     db_name, chunk_docs = await end_task.call(
                         {"file_path": knowledge_content, "space": doc.space}
                     )
+                    
+                    # Enrich chunk metadata with document information for DAG workflow
+                    for chunk in chunk_docs:
+                        if not hasattr(chunk, 'metadata') or chunk.metadata is None:
+                            chunk.metadata = {}
+                        # Add document metadata to chunk
+                        chunk.metadata.update({
+                            'document_id': doc.id,
+                            'doc_name': doc.doc_name,
+                            'doc_type': doc.doc_type,
+                            'id': doc.id  # For backward compatibility
+                        })
+                    
                     doc.chunk_size = len(chunk_docs)
                     vector_ids = [chunk.chunk_id for chunk in chunk_docs]
                 else:
@@ -586,6 +599,19 @@ class Service(BaseService[KnowledgeSpaceEntity, SpaceServeRequest, SpaceServeRes
                     )
 
                     chunk_docs = assembler.get_chunks()
+                    
+                    # Enrich chunk metadata with document information before persisting
+                    for chunk in chunk_docs:
+                        if not hasattr(chunk, 'metadata') or chunk.metadata is None:
+                            chunk.metadata = {}
+                        # Add document metadata to chunk
+                        chunk.metadata.update({
+                            'document_id': doc.id,
+                            'doc_name': doc.doc_name,
+                            'doc_type': doc.doc_type,
+                            'id': doc.id  # For backward compatibility
+                        })
+                    
                     doc.chunk_size = len(chunk_docs)
                     vector_ids = await assembler.apersist(
                         max_chunks_once_load=max_chunks_once_load,
