@@ -60,8 +60,8 @@ auto_login = true
 [[models.llms]]
 name = "qwen3"
 provider = "proxy/openai"
-api_base = "http://192.168.128.168:9997/v1"
-api_url = "http://192.168.128.168:9997/v1"
+api_base = "http://192.168.128.33:9997/v1"
+api_url = "http://192.168.128.33:9997/v1"
 api_key = "sk-7Hs4qRt2vBn8J"
 
 [[models.embeddings]]
