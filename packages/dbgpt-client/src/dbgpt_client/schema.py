@@ -52,6 +52,10 @@ class ChatCompletionRequestBody(APIChatCompletionRequest):
     enable_vis: bool = Field(
         default=True, description="response content whether to output vis label"
     )
+    flag: Optional[str] = Field(
+        default="0", 
+        description="Neo4j usage flag. '0' to disable Neo4j (default), '1' to enable Neo4j knowledge graph query"
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -68,6 +72,9 @@ class ChatCompletionRequestBody(APIChatCompletionRequest):
     def to_common_llm_http_request_body(self) -> CommonLLMHttpRequestBody:
         """Convert to CommonLLMHttpRequestBody."""
         max_new_tokens = self.max_tokens
+        extra_data = {}
+        if self.flag is not None:
+            extra_data["flag"] = self.flag
         return CommonLLMHttpRequestBody(
             model=self.model,
             messages=self.single_prompt(),
@@ -82,6 +89,7 @@ class ChatCompletionRequestBody(APIChatCompletionRequest):
             sys_code=self.sys_code,
             incremental=self.incremental,
             enable_vis=self.enable_vis,
+            extra=extra_data if extra_data else None,
         )
 
 

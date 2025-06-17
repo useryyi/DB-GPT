@@ -472,6 +472,7 @@ async def get_chat_instance(dialogue: ConversationVo = Body()) -> BaseChat:
         max_new_tokens=dialogue.max_new_tokens,
         prompt_code=dialogue.prompt_code,
         chat_mode=ChatScene.of_mode(dialogue.chat_mode),
+        neo4j_flag=dialogue.flag if hasattr(dialogue, 'flag') and dialogue.flag else "0",
     )
     chat: BaseChat = await blocking_func_to_async(
         CFG.SYSTEM_APP,

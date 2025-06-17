@@ -130,6 +130,19 @@ class ChatKnowledge(BaseChat):
             logger.error(f"Failed to initialize Neo4j service: {e}")
             self.neo4j_service = None
 
+    def _setup_prompt_template_based_on_flag(self):
+        """根据Neo4j开关flag设置适当的提示词模板"""
+        if self._chat_param.neo4j_flag != "1":
+            # 当Neo4j未启用时，使用知识库专用模板
+            try:
+                from dbgpt_app.scene.chat_knowledge.v1.prompt_kb_only import prompt_kb_only
+                self.prompt_template.prompt = prompt_kb_only
+                logger.info("Using knowledge base only prompt template (Neo4j disabled)")
+            except ImportError:
+                logger.warning("Knowledge base only prompt template not found, using default template")
+        else:
+            logger.info("Using default prompt template (Neo4j enabled)")
+
     async def _handle_final_output(
         self, final_output: ModelOutput, incremental: bool = False
     ):
@@ -147,6 +160,9 @@ class ChatKnowledge(BaseChat):
 
     @trace()
     async def generate_input_values(self) -> Dict:
+        # 根据Neo4j flag设置适当的提示词模板
+        self._setup_prompt_template_based_on_flag()
+        
         if self.space_context and self.space_context.get("prompt"):
             # Not use template_define
             # Replace the template with the prompt template
@@ -170,9 +186,11 @@ class ChatKnowledge(BaseChat):
         # Execute Neo4j query in parallel with knowledge base search
         neo4j_results = []
         neo4j_context = ""
-        if self.neo4j_service and self.neo4j_service.is_connected():
+        # 检查Neo4j开关，只有当flag为"1"时才执行Neo4j查询
+        if (self._chat_param.neo4j_flag == "1" and 
+            self.neo4j_service and self.neo4j_service.is_connected()):
             try:
-                logger.info(f"Executing Neo4j query for: {user_input}")
+                logger.info(f"Neo4j flag enabled, executing Neo4j query for: {user_input}")
                 neo4j_results = self.neo4j_service.query_graph(user_input, limit=5)
                 logger.info(f"Neo4j returned {len(neo4j_results)} results")
                 if neo4j_results:
@@ -244,7 +262,10 @@ class ChatKnowledge(BaseChat):
             except Exception as e:
                 logger.error(f"Error querying Neo4j: {e}")
         else:
-            logger.warning("Neo4j service is not available or not connected, skipping Neo4j query")
+            if self._chat_param.neo4j_flag != "1":
+                logger.info("Neo4j flag disabled, skipping Neo4j query")
+            else:
+                logger.warning("Neo4j service is not available or not connected, skipping Neo4j query")
         
         self.chunks_with_score = []
         knowledge_base_context = ""

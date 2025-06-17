@@ -70,6 +70,7 @@ class ChatParam:
     prompt_code: Optional[str] = None
     ext_info: Optional[Dict[str, Any]] = None
     app_config: Optional[GPTsAppCommonConfig] = None
+    neo4j_flag: str = "0"  # Neo4j开关，默认关闭(0)，设为1时启用Neo4j
 
     def real_app_config(self, type_class: Type[C]) -> C:
         if self.app_config is None:

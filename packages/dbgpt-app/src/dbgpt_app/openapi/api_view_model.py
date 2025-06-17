@@ -90,6 +90,11 @@ class ConversationVo(BaseModel):
     prompt_code: Optional[str] = Field(None, description="prompt code")
 
     ext_info: Optional[dict] = {}
+    
+    flag: Optional[str] = Field(
+        default="0", 
+        description="Neo4j usage flag. '0' to disable Neo4j (default), '1' to enable Neo4j knowledge graph query"
+    )
 
 
 class MessageVo(BaseModel):
