@@ -17,13 +17,72 @@ except ImportError:
 class SimpleNeo4jQueryService:
     """Simplified Neo4j Query Service for basic operations."""
     
-    def __init__(self, uri: str = "bolt://192.168.102.59:7687", 
-                 user: str = "neo4j", 
-                 password: str = "tWsM@neo4j2023"):
+    def __init__(self, config=None):
         """Initialize simple Neo4j service."""
-        self.uri = uri
-        self.user = user
-        self.password = password
+        # Use configuration from parameter or try to get from system
+        if config:
+            self.uri = f"bolt://{config.host}:{config.port}"
+            self.user = config.user
+            self.password = config.password
+        else:
+            # Try to get from system app config first
+            config_found = False
+            try:
+                from dbgpt.component import SystemApp
+                system_app = SystemApp.get_instance()
+                logger.info(f"System app found: {system_app is not None}")
+                
+                if system_app and hasattr(system_app, 'config'):
+                    app_config = system_app.config.get('app_config')
+                    logger.info(f"App config found: {app_config is not None}")
+                    
+                    if app_config and hasattr(app_config, 'neo4j'):
+                        neo4j_config = app_config.neo4j
+                        logger.info(f"Neo4j config found - host: {neo4j_config.host}, port: {neo4j_config.port}")
+                        self.uri = f"bolt://{neo4j_config.host}:{neo4j_config.port}"
+                        self.user = neo4j_config.user
+                        self.password = neo4j_config.password
+                        config_found = True
+                    else:
+                        logger.warning("No neo4j config found in app_config")
+                else:
+                    logger.warning("No system app or config found")
+            except Exception as e:
+                logger.warning(f"Failed to get Neo4j config from system: {e}")
+            
+            # If system config not found, try to read directly from config file
+            if not config_found:
+                try:
+                    from dbgpt.util.configure import ConfigurationManager
+                    from dbgpt.configs.model_config import ROOT_PATH
+                    import os
+                    
+                    # Try to find the current config file
+                    config_file = os.path.join(ROOT_PATH, "configs", "dbgpt-proxy-xinference2.toml")
+                    if os.path.exists(config_file):
+                        logger.info(f"Reading Neo4j config directly from: {config_file}")
+                        cfg = ConfigurationManager.from_file(config_file)
+                        
+                        # Parse neo4j section
+                        if cfg.exists("neo4j"):
+                            self.uri = f"bolt://{cfg.get('neo4j.host', 'localhost')}:{cfg.get('neo4j.port', 7687)}"
+                            self.user = cfg.get('neo4j.user', 'neo4j')
+                            self.password = cfg.get('neo4j.password', 'password')
+                            logger.info(f"Loaded Neo4j config from file - URI: {self.uri}, User: {self.user}")
+                            config_found = True
+                        else:
+                            logger.warning("No [neo4j] section found in config file")
+                    else:
+                        logger.warning(f"Config file not found: {config_file}")
+                except Exception as e:
+                    logger.warning(f"Failed to read config file directly: {e}")
+            
+            # Final fallback
+            if not config_found:
+                logger.warning("Using fallback Neo4j configuration")
+                self.uri = "bolt://localhost:7687"
+                self.user = "neo4j"
+                self.password = "password"
         self.driver = None
         self._connected = False
         

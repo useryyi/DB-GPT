@@ -118,14 +118,17 @@ class ChatKnowledge(BaseChat):
             # Import the simplified Neo4j service that doesn't require LangChain chains
             import sys
             import os
-            sys.path.insert(0, '/home/yannic/work/github/DB-GPT')
+            # Add the root path to sys.path to find the module
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            root_path = os.path.join(current_dir, '../../../../../../../../../')
+            sys.path.insert(0, os.path.abspath(root_path))
             from simple_neo4j_service import SimpleNeo4jQueryService
             
             self.neo4j_service = SimpleNeo4jQueryService()
             is_connected = self.neo4j_service.is_connected()
             logger.info(f"Simplified Neo4j service initialized, connected: {is_connected}")
             if not is_connected:
-                logger.warning("Neo4j service is not connected. Check if Neo4j server is running at 192.168.102.59:7687")
+                logger.warning("Neo4j service is not connected. Check configuration and server status")
         except Exception as e:
             logger.error(f"Failed to initialize Neo4j service: {e}")
             self.neo4j_service = None

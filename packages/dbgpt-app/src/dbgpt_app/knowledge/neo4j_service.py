@@ -231,20 +231,20 @@ MATCH (p:人物) WHERE p.出生地 = '长沙'
             
             if model_config:
                 llm_client = OpenAILLMClient(
-                    api_base=model_config.get("api_base", "http://192.168.128.160:9997/v1"),
-                    api_key=model_config.get("api_key", "sk-7Hs4qRt2vBn8J"),
-                    model=model_config.get("model", "qwen3"),
-                    model_alias=model_config.get("model_alias", "qwen3")
+                    api_base=model_config.get("api_base"),
+                    api_key=model_config.get("api_key"),
+                    model=model_config.get("model"),
+                    model_alias=model_config.get("model_alias")
                 )
                 logger.info(f"Successfully created OpenAI-compatible client with config: {model_config.get('model', 'qwen3')}")
                 return llm_client
             else:
                 # Fallback to hardcoded configuration
                 llm_client = OpenAILLMClient(
-                    api_base="http://192.168.128.160:9997/v1",
-                    api_key="sk-7Hs4qRt2vBn8J",
-                    model="qwen3",
-                    model_alias="qwen3"
+                    api_base=model_config.get("api_base"),
+                    api_key=model_config.get("api_key"),
+                    model=model_config.get("model"),
+                    model_alias=model_config.get("model_alias")
                 )
                 logger.info("Successfully created OpenAI-compatible client with fallback configuration")
                 return llm_client
