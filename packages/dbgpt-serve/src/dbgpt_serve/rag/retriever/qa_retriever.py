@@ -107,6 +107,19 @@ class QARetriever(BaseRetriever):
         query = remove_trailing_punctuation(query)
         candidate_results = []
         doc_ids = [doc.id for doc in self.documents]
+        
+        # 限制文档数量以避免SQL参数过多的问题
+        # SQLite默认限制是999个参数，我们使用更保守的500个
+        MAX_DOC_IDS = 500
+        if len(doc_ids) > MAX_DOC_IDS:
+            logger.warning(f"Too many documents ({len(doc_ids)}), limiting to {MAX_DOC_IDS} for performance")
+            doc_ids = doc_ids[:MAX_DOC_IDS]
+        
+        # 如果没有文档ID，直接返回空结果
+        if not doc_ids:
+            logger.info("No documents found, returning empty results")
+            return candidate_results
+            
         query_param = DocumentChunkEntity()
         chunks = self._chunk_dao.get_chunks_with_questions(
             query=query_param, document_ids=doc_ids

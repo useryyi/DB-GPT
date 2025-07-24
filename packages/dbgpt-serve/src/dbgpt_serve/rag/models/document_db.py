@@ -154,11 +154,6 @@ class KnowledgeDocumentDao(BaseDao):
         print(f"current session:{session}")
         knowledge_documents = session.query(KnowledgeDocumentEntity)
         
-        # 确保不会因为空的ids列表而返回所有文档
-        if not ids:
-            session.close()
-            return []
-        
         knowledge_documents = knowledge_documents.filter(
             KnowledgeDocumentEntity.id.in_(ids)
         )
