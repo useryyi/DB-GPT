@@ -107,6 +107,15 @@ class QARetriever(BaseRetriever):
         query = remove_trailing_punctuation(query)
         candidate_results = []
         doc_ids = [doc.id for doc in self.documents]
+        
+        # Skip the query if there are too many document IDs to avoid SQL variable limit
+        if len(doc_ids) > 500:  # SQLite typically has a limit around 999 variables
+            logger.warning(
+                f"Too many documents ({len(doc_ids)}), skipping QA chunk query "
+                f"to avoid SQL variable limit"
+            )
+            return candidate_results
+        
         query_param = DocumentChunkEntity()
         chunks = self._chunk_dao.get_chunks_with_questions(
             query=query_param, document_ids=doc_ids

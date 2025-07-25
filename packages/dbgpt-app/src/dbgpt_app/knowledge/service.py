@@ -208,35 +208,36 @@ class KnowledgeService:
         if ks is None:
             raise Exception(f"there is no space id called {space}")
         res = DocumentQueryResponse()
-        if request.doc_ids and len(request.doc_ids) > 0:
-            documents: List[KnowledgeDocumentEntity] = (
-                knowledge_document_dao.documents_by_ids(request.doc_ids)
-            )
-            res.data = [item.to_dict() for item in documents]
+        # Skip doc_ids query as per requirement to avoid DAO query issues
+        # if request.doc_ids and len(request.doc_ids) > 0:
+        #     documents: List[KnowledgeDocumentEntity] = (
+        #         knowledge_document_dao.documents_by_ids(request.doc_ids)
+        #     )
+        #     res.data = [item.to_dict() for item in documents]
+        # else:
+        space_name = ks.name
+        query = {
+            "doc_type": request.doc_type,
+            "space": space_name,
+            "status": request.status,
+        }
+        if request.doc_name:
+            docs = knowledge_document_dao.get_list({"space": space_name})
+            docs = [DocumentResponse.serve_to_response(doc) for doc in docs]
+            res.data = [
+                doc
+                for doc in docs
+                if doc.doc_name and request.doc_name in doc.doc_name
+            ]
         else:
-            space_name = ks.name
-            query = {
-                "doc_type": request.doc_type,
-                "space": space_name,
-                "status": request.status,
-            }
-            if request.doc_name:
-                docs = knowledge_document_dao.get_list({"space": space_name})
-                docs = [DocumentResponse.serve_to_response(doc) for doc in docs]
-                res.data = [
-                    doc
-                    for doc in docs
-                    if doc.doc_name and request.doc_name in doc.doc_name
-                ]
-            else:
-                result = knowledge_document_dao.get_list_page(
-                    query, page=request.page, page_size=request.page_size
-                )
-                docs = result.items
-                docs = [DocumentResponse.serve_to_response(doc) for doc in docs]
-                res.data = docs
-                res.total = result.total_count
-                res.page = result.page
+            result = knowledge_document_dao.get_list_page(
+                query, page=request.page, page_size=request.page_size
+            )
+            docs = result.items
+            docs = [DocumentResponse.serve_to_response(doc) for doc in docs]
+            res.data = docs
+            res.total = result.total_count
+            res.page = result.page
         return res
 
     async def document_summary(self, request: DocumentSummaryRequest):

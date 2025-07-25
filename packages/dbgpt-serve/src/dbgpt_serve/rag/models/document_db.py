@@ -154,6 +154,13 @@ class KnowledgeDocumentDao(BaseDao):
         print(f"current session:{session}")
         knowledge_documents = session.query(KnowledgeDocumentEntity)
         
+        # Handle large number of IDs to avoid SQL variable limit
+        if len(ids) > 500:
+            print(f"Warning: Too many document IDs ({len(ids)}), "
+                  f"this may cause SQL variable limit issues")
+            # For large lists, we can either batch the query or skip the filter
+            # Here we'll proceed but log a warning
+        
         knowledge_documents = knowledge_documents.filter(
             KnowledgeDocumentEntity.id.in_(ids)
         )

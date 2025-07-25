@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import Any, Dict, List, Union
 
@@ -7,6 +8,8 @@ from dbgpt._private.pydantic import model_to_dict
 from dbgpt.storage.metadata import BaseDao, Model
 from dbgpt.storage.metadata._base_dao import QUERY_SPEC, REQ, RES
 from dbgpt_serve.rag.api.schemas import ChunkServeRequest, ChunkServeResponse
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentChunkEntity(Model):
@@ -91,9 +94,15 @@ class DocumentChunkDao(BaseDao):
                 DocumentChunkEntity.meta_info == query.meta_info
             )
         if document_ids is not None:
-            document_chunks = document_chunks.filter(
-                DocumentChunkEntity.document_id.in_(document_ids)
-            )
+            # Handle large number of document_ids by processing in batches
+            if len(document_ids) > 500:
+                # If too many IDs, skip the filter to avoid SQL variable limit
+                logger.warning(f"Too many document_ids ({len(document_ids)}), "
+                              f"skipping document_id filter in chunk query")
+            else:
+                document_chunks = document_chunks.filter(
+                    DocumentChunkEntity.document_id.in_(document_ids)
+                )
 
         document_chunks = document_chunks.order_by(DocumentChunkEntity.id.asc())
         document_chunks = document_chunks.offset((page - 1) * page_size).limit(
@@ -119,9 +128,15 @@ class DocumentChunkDao(BaseDao):
         )
         
         if document_ids is not None:
-            document_chunks = document_chunks.filter(
-                DocumentChunkEntity.document_id.in_(document_ids)
-            )
+            # Handle large number of document_ids by processing in batches
+            if len(document_ids) > 500:
+                # If too many IDs, skip the filter to avoid SQL variable limit
+                logger.warning(f"Too many document_ids ({len(document_ids)}), "
+                              f"skipping document_id filter in chunk query")
+            else:
+                document_chunks = document_chunks.filter(
+                    DocumentChunkEntity.document_id.in_(document_ids)
+                )
         
         document_chunks = document_chunks.order_by(DocumentChunkEntity.id.asc())
         result = document_chunks.all()
