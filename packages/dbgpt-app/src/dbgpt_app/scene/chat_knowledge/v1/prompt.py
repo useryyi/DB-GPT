@@ -16,7 +16,6 @@ The assistant gives helpful, detailed, professional and polite answers to the us
 questions. """
 
 
-<<<<<<< HEAD
 _DEFAULT_TEMPLATE_ZH = """ 你是一个权威的问答专家，请基于提供的信息直接回答用户的问题。
 
 回答要求:
@@ -35,18 +34,6 @@ _DEFAULT_TEMPLATE_ZH = """ 你是一个权威的问答专家，请基于提供�
      2.回答时可以适当分点说明，使用markdown格式让内容更清晰。
      3.禁止编造任何内容，禁止引用"公开资料"、"历史文献"等不存在的来源。
 
-=======
-_DEFAULT_TEMPLATE_ZH = """ 基于以下给出的已知信息, 准守规范约束，专业、\
-简要回答用户的问题.
-规范约束:
-     1.如果已知信息包含的图片、链接、表格、代码块等特殊markdown标签格式的信息，\
-     确保在答案中包含原文这些图片、链接、表格和代码标签，不要丢弃不要修改，\
-     如:图片格式：![image.png](xxx), 链接格式:[xxx](xxx), \
-     表格格式:|xxx|xxx|xxx|, 代码格式:```xxx```.
-     2.如果无法从提供的内容中获取答案, 请说: "知识库中提供的内容不足以回答此问题" \
-     禁止胡乱编造.
-     3.回答的时候最好按照1.2.3.点进行总结, 并以markdown格式显示.
->>>>>>> upstream/main
             已知内容: 
             {context}
             
@@ -69,19 +56,9 @@ Format Requirements:
     1.Ensure to include original markdown formatting elements such as images, links, \
     tables, or code blocks without alteration in the response if they are present in \
     the provided information.
-<<<<<<< HEAD
     2.When responding, you may appropriately organize points and use markdown format to make content clearer.
     3.Prohibited from fabricating any content, prohibited from citing "public materials", "historical documents" or other non-existent sources.
     
-=======
-        For example, image format should be ![image.png](xxx), link format [xxx](xxx), \
-        table format should be represented with |xxx|xxx|xxx|, and code format with xxx.
-    2.If the information available in the knowledge base is insufficient to answer the \
-    question, state clearly: "The content provided in the knowledge base is not enough \
-    to answer this question," and avoid making up answers.
-    3.When responding, it is best to summarize the points in the order of 1, 2, 3, And \
-    displayed in markdown format.
->>>>>>> upstream/main
             known information: 
             {context}
             
