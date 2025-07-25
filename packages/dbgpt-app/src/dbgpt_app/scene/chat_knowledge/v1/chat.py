@@ -183,13 +183,8 @@ class ChatKnowledge(BaseChat):
         user_input = self.current_user_input.last_text
 
         tasks = [self.execute_similar_search(user_input)]
-        try:
-            candidates_with_scores = await run_async_tasks(tasks=tasks, concurrency_limit=1)
-            candidates_with_scores = reduce(lambda x, y: x + y, candidates_with_scores)
-        except Exception as e:
-            logger.error(f"Error in similarity search: {e}")
-            # 当检索失败时，返回空结果而不是崩溃
-            candidates_with_scores = []
+        candidates_with_scores = await run_async_tasks(tasks=tasks, concurrency_limit=1)
+        candidates_with_scores = reduce(lambda x, y: x + y, candidates_with_scores)
         
         # Execute Neo4j query in parallel with knowledge base search
         neo4j_results = []
@@ -407,14 +402,9 @@ class ChatKnowledge(BaseChat):
         with root_tracer.start_span(
             "execute_similar_search", metadata={"query": query}
         ):
-            try:
-                return await self._space_retriever.aretrieve_with_scores(
-                    query, self.recall_score
-                )
-            except Exception as e:
-                logger.error(f"Error in similar search for query '{query}': {e}")
-                # 当检索失败时，返回空结果而不是传播异常
-                return []
+           return await self._space_retriever.aretrieve_with_scores(
+                query, self.recall_score
+            )
     
     def __del__(self):
         """Cleanup Neo4j connection when object is destroyed."""

@@ -118,42 +118,11 @@ class DocumentChunkDao(BaseDao):
             not_(DocumentChunkEntity.questions is None)
         )
         
-        # 分批处理大量document_ids以避免SQL参数限制
         if document_ids is not None:
-            if len(document_ids) == 0:
-                # 如果没有文档ID，返回空结果
-                session.close()
-                return []
-            elif len(document_ids) > 500:  # SQLite参数限制
-                # 分批查询
-                all_results = []
-                batch_size = 500
-                for i in range(0, len(document_ids), batch_size):
-                    batch_ids = document_ids[i:i + batch_size]
-                    batch_chunks = session.query(DocumentChunkEntity)
-                    if query.doc_name is not None:
-                        batch_chunks = batch_chunks.filter(
-                            DocumentChunkEntity.doc_name == query.doc_name
-                        )
-                    if query.meta_info is not None:
-                        batch_chunks = batch_chunks.filter(
-                            DocumentChunkEntity.meta_info == query.meta_info
-                        )
-                    batch_chunks = batch_chunks.filter(
-                        not_(DocumentChunkEntity.questions is None)
-                    )
-                    batch_chunks = batch_chunks.filter(
-                        DocumentChunkEntity.document_id.in_(batch_ids)
-                    )
-                    batch_chunks = batch_chunks.order_by(DocumentChunkEntity.id.asc())
-                    all_results.extend(batch_chunks.all())
-                session.close()
-                return all_results
-            else:
-                document_chunks = document_chunks.filter(
-                    DocumentChunkEntity.document_id.in_(document_ids)
-                )
-
+            document_chunks = document_chunks.filter(
+                DocumentChunkEntity.document_id.in_(document_ids)
+            )
+        
         document_chunks = document_chunks.order_by(DocumentChunkEntity.id.asc())
         result = document_chunks.all()
         session.close()
