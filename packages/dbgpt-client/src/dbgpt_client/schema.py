@@ -102,6 +102,7 @@ class ChatMode(Enum):
     CHAT_KNOWLEDGE = "chat_knowledge"
     CHAT_DATA = "chat_data"
     CHAT_DB_QA = "chat_with_db_qa"
+    CHAT_DASHBOARD = "chat_dashboard"
 
 
 class AWELTeamModel(BaseModel):

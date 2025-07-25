@@ -32,11 +32,20 @@ const useChat = ({ queryAgentURL = '/api/v1/chat/completions', app_code }: Props
         message.warning(i18n.t('no_context_tip'));
         return;
       }
-      const params = {
-        ...data,
+
+      // Ensure prompt_code is preserved and not overwritten
+      const params: Record<string, any> = {
         conv_uid: chatId,
         app_code,
       };
+
+      // Add data fields, ensuring prompt_code is set correctly
+      if (data) {
+        Object.keys(data).forEach(key => {
+          params[key] = data[key];
+        });
+      }
+
       try {
         await fetchEventSource(`${process.env.API_BASE_URL ?? ''}${queryAgentURL}`, {
           method: 'POST',
@@ -72,7 +81,8 @@ const useChat = ({ queryAgentURL = '/api/v1/chat/completions', app_code }: Props
               if (scene === 'chat_agent') {
                 message = JSON.parse(message).vis;
               } else {
-                message = JSON.parse(message);
+                data = JSON.parse(event.data);
+                message = data.choices?.[0]?.message?.content;
               }
             } catch {
               message.replaceAll('\\n', '\n');
