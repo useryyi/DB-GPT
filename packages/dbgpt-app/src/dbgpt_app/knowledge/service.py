@@ -403,7 +403,8 @@ class KnowledgeService:
         """Enrich chunks with doc_name field based on document_id or source path
         
         Note: Since v0.6.0, chunk metadata should already be enriched during 
-        embedding/storage phase. This method serves as a fallback only.
+        embedding/storage phase. For large-scale deployments (>10K documents),
+        this method will skip expensive database queries to maintain performance.
         
         Args:
             - space_name: Knowledge Space Name
@@ -412,7 +413,18 @@ class KnowledgeService:
             - List of enriched chunks with doc_name field
         """
         try:
-            # Quick check: if all chunks already have doc_name, skip expensive operations
+            # Quick performance check: for large datasets, skip expensive operations
+            query = KnowledgeDocumentEntity(space=space_name)
+            doc_count = knowledge_document_dao.get_knowledge_documents_count(query)
+            
+            if doc_count > 10000:  # For large datasets, skip expensive queries
+                logger.info(
+                    f"Large dataset detected ({doc_count} documents), "
+                    f"skipping expensive chunk enrichment queries for performance"
+                )
+                return chunks
+            
+            # Quick check: if all chunks already have doc_name, skip expensive ops
             chunks_missing_doc_name = []
             for i, chunk in enumerate(chunks):
                 if (hasattr(chunk, 'metadata') and chunk.metadata and 
@@ -426,11 +438,12 @@ class KnowledgeService:
                 # All chunks already have doc_name, no need to enrich
                 return chunks
                 
-            logger.info(f"Found {len(chunks_missing_doc_name)} chunks missing doc_name, "
-                       f"enriching as fallback...")
+            logger.info(
+                f"Found {len(chunks_missing_doc_name)} chunks missing doc_name, "
+                f"enriching as fallback..."
+            )
             
             # Get all documents in the space 
-            query = KnowledgeDocumentEntity(space=space_name)
             documents = knowledge_document_dao.get_documents(query)
             
             # Build mapping from document id to document info
@@ -445,12 +458,7 @@ class KnowledgeService:
                     }
                     doc_id_to_info[doc.id] = doc_info
             
-            # For chunks that don't have document_id in metadata, 
-            # we need to find them through database chunks
-            chunk_contents_to_check = []
-            chunk_content_map = {}
-            
-            # Enrich each chunk with document info
+            # Enrich each chunk with document info - but skip database queries
             for i, chunk in enumerate(chunks):
                 doc_info = None
                 
@@ -475,81 +483,9 @@ class KnowledgeService:
                     if doc_id and doc_id in doc_id_to_info:
                         doc_info = doc_id_to_info[doc_id]
                 
-                # If we still don't have doc_info, prepare for database lookup
-                if not doc_info and hasattr(chunk, 'content') and chunk.content:
-                    chunk_contents_to_check.append(chunk.content[:200])  # Use first 200 chars for better matching
-                    chunk_content_map[chunk.content[:200]] = i
-                
                 # If we found document info, enrich the chunk
                 if doc_info:
                     self._apply_doc_info_to_chunk(chunk, doc_info)
-            
-            # For chunks without document_id, try to find them in database by content
-            if chunk_contents_to_check and doc_id_to_info:
-                # Get chunks from database that match space documents
-                doc_ids = list(doc_id_to_info.keys())
-                if doc_ids:
-                    # Query chunks from database for this space's documents
-                    db_chunks = document_chunk_dao.get_document_chunks(
-                        DocumentChunkEntity(), document_ids=doc_ids, page_size=10000
-                    )
-                    
-                    # Build content to document_id mapping from database
-                    content_to_doc_id = {}
-                    for db_chunk in db_chunks:
-                        if db_chunk.content and db_chunk.document_id:
-                            content_key = db_chunk.content[:200]  # Match with first 200 chars
-                            content_to_doc_id[content_key] = db_chunk.document_id
-                    
-                    # Match retrieved chunks with database chunks by content
-                    for content_key, chunk_index in chunk_content_map.items():
-                        if content_key in content_to_doc_id:
-                            doc_id = content_to_doc_id[content_key]
-                            if doc_id in doc_id_to_info:
-                                doc_info = doc_id_to_info[doc_id]
-                                self._apply_doc_info_to_chunk(chunks[chunk_index], doc_info)
-            
-            # Alternative approach: if still some chunks are missing info,
-            # query ALL documents (not just from this space) and try to match by UUID from source
-            chunks_still_missing = []
-            for i, chunk in enumerate(chunks):
-                if (hasattr(chunk, 'metadata') and chunk.metadata and
-                    'doc_name' not in chunk.metadata and 'source' in chunk.metadata):
-                    chunks_still_missing.append((i, chunk))
-            
-            if chunks_still_missing:
-                # Get all documents and try to match by source file patterns
-                all_docs = knowledge_document_dao.get_documents(KnowledgeDocumentEntity())
-                all_doc_id_to_info = {}
-                for doc in all_docs:
-                    if doc.id:
-                        all_doc_id_to_info[doc.id] = {
-                            'id': doc.id,
-                            'doc_name': doc.doc_name,
-                            'doc_type': doc.doc_type
-                        }
-                
-                if all_doc_id_to_info:
-                    # Get all chunks from database
-                    all_db_chunks = document_chunk_dao.get_document_chunks(
-                        DocumentChunkEntity(), page_size=50000
-                    )
-                    
-                    # Build source-based mapping
-                    source_to_doc_id = {}
-                    for db_chunk in all_db_chunks:
-                        if db_chunk.content and db_chunk.document_id:
-                            content_key = db_chunk.content[:200]
-                            source_to_doc_id[content_key] = db_chunk.document_id
-                    
-                    # Try to match missing chunks
-                    for chunk_index, chunk in chunks_still_missing:
-                        content_key = chunk.content[:200] if hasattr(chunk, 'content') and chunk.content else None
-                        if content_key and content_key in source_to_doc_id:
-                            doc_id = source_to_doc_id[content_key]
-                            if doc_id in all_doc_id_to_info:
-                                doc_info = all_doc_id_to_info[doc_id]
-                                self._apply_doc_info_to_chunk(chunk, doc_info)
             
             return chunks
         except Exception as e:
