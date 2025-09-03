@@ -217,14 +217,16 @@ class Service(BaseService[KnowledgeSpaceEntity, SpaceServeRequest, SpaceServeRes
         doc_ids = []
         for sync_request in requests:
             space_id = sync_request.space_id
-            # Skip documents_by_ids query to avoid DAO query issues
-            # Create a dummy document object if needed for backward compatibility
-            # docs = self._document_dao.documents_by_ids([sync_request.doc_id])
-            # if len(docs) == 0:
-            #     raise Exception(
-            #         f"there are document called, doc_id: {sync_request.doc_id}"
-            #     )
-            # doc = docs[0]
+            # Query document from database to get actual content
+            docs = self._document_dao.documents_by_ids([sync_request.doc_id])
+            if len(docs) == 0:
+                raise Exception(
+                    f"No document found with doc_id: {sync_request.doc_id}"
+                )
+            doc = docs[0]
+            # Set default doc_type if not available
+            if not doc.doc_type:
+                doc.doc_type = KnowledgeType.DOCUMENT.value
             # if (
             #     doc.status == SyncStatus.RUNNING.name
             #     or doc.status == SyncStatus.FINISHED.name
@@ -232,13 +234,6 @@ class Service(BaseService[KnowledgeSpaceEntity, SpaceServeRequest, SpaceServeRes
             #     raise Exception(
             #         f" doc:{doc.doc_name} status is {doc.status}, can not sync"
             #     )
-            
-            # Create minimal doc object for compatibility
-            from dbgpt_serve.rag.models.document_db import KnowledgeDocumentEntity
-            doc = KnowledgeDocumentEntity()
-            doc.id = sync_request.doc_id
-            doc.doc_name = f"doc_{sync_request.doc_id}"
-            doc.status = "TODO"  # Skip status check
             
             chunk_parameters = sync_request.chunk_parameters
             if chunk_parameters.chunk_strategy != ChunkStrategy.CHUNK_BY_SIZE.name:
@@ -529,6 +524,7 @@ class Service(BaseService[KnowledgeSpaceEntity, SpaceServeRequest, SpaceServeRes
         knowledge_content = doc.content
         if (
             doc.doc_type == KnowledgeType.DOCUMENT.value
+            and knowledge_content 
             and knowledge_content.startswith(_SCHEMA)
         ):
             logger.info(
