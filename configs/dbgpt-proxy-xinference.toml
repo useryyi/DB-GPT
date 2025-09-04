@@ -67,15 +67,15 @@ api_key = "sk-7Hs4qRt2vBn8J"
 [[models.embeddings]]
 name = "bge-m3"
 provider = "proxy/openai"
-api_url = "http://192.168.128.168:9997/v1/embeddings"
-api_key = "sk-inference"
+api_url = "http://192.168.128.33:9997/v1/embeddings"
+api_key = "sk-7Hs4qRt2vBn8J"
 model = "bge-m3"
 
 # [[models.rerankers]]
 # type = "reranker"
 # name = "bge-reranker-v2-m3"
 # provider = "proxy/openapi"
-# api_url = "http://192.168.128.168:9997/v1/rerank" 
+# api_url = "http://192.168.128.33:9997/v1/rerank" 
 # api_key = "sk-inference"
 # 
 
@@ -83,9 +83,9 @@ model = "bge-m3"
 type = "reranker"
 name = "bge-reranker-v2-m3"
 provider = "proxy/infiniai"
-api_url = "http://192.168.128.168:9997/v1/rerank" 
+api_url = "http://192.168.128.33:9997/v1/rerank" 
 # api_key = "sk-inference"
-api_key = "${env:INFINIAI_API_KEY:-sk-kk6ej7jfzwkqrf75}" 
+api_key = "sk-7Hs4qRt2vBn8J" 
 
 # Neo4j 知识图谱配置
 [neo4j]
